@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block head %}
+    <style>
+        .game {
+            padding: 20px;
+            border-radius: 10px;
+            background-color: #444444;
+            box-shadow: 2px 2px 4px #000000;
+            margin: 10px 0 10px 0;
+            max-width: 400px;
+            text-align: center;
+        }
+        .btn {
+            margin: 4px;
+        }
+    </style>
+{% endblock head %}
+{% block content %}
+    {% if request.user.is_authenticated %}
+        <h2>You are logged in as {{ request.user.username }}</h2>
+        {% if user_in_game %}
+            <a href="{% url 'game' %}" class="btn btn-primary btn-lg">Join last game</a>
+            <form action="" method="post">
+                {% csrf_token %}
+                <input type="submit" class="btn btn-primary btn-lg" name="action" value="Disconnect">
+            </form>
+        {% endif %}
+        <form action="" method="post">
+            {% csrf_token %}
+            <input type="submit" class="btn btn-primary btn-lg" name="action" value="Logout">
+        </form>
+    {% else %}
+        <div class="register-form">
+            <form action="" method="post">
+                {% csrf_token %}
+                <div class="row">
+                    <div class="col-lg-6">
+                        <div class="input-group mb-3">
+                            <span class="input-group-text" id="inputGroup-sizing-default">Username</span>
+                            <input type="text" class="form-control" name="username" aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default">
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="input-group mb-3">
+                            <span class="input-group-text" id="inputGroup-sizing-default">Password</span>
+                            <input type="password" class="form-control" name="password" aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default">
+                        </div>
+                    </div>
+                </div>
+
+                    <input type="submit" class="btn btn-primary btn-lg" name="action" value="Login">
+                    <input type="submit" class="btn btn-primary btn-lg" name="action" value="Register">
+            </form>
+        </div>
+
+    {% endif %}
+    <h2>Broomberman</h2>
+    <a class="btn btn-primary btn-lg" href="{% url 'new_game' %}">Create new game</a>
+    <h2>Or join</h2>
+    {% for game in games %}
+        <div class="col">
+        <div class="game">
+            <h2>{{ game.name }} - {{ game.players_count }}/4</h2>
+            <form action="" method="post">
+                {% csrf_token %}
+                <div class="input-group mb-3">
+                    <span class="input-group-text" id="inputGroup-sizing-default">Passphrase</span>
+                    <input type="password" class="form-control" name="passphrase" aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default">
+                    <input type="text" name="name" value="{{ game.name }}" hidden>
+                </div>
+                <input type="submit" class="btn btn-primary btn-lg" name="action" value="Join">
+            </form>
+        </div>
+        </div>
+    {% endfor %}
+{% endblock content %}

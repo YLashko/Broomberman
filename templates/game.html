@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h2>{{ name }}</h2>
+    {% if type == "Monitor" %}
+        <form action="" method="post">
+            {% csrf_token %}
+            <input type="submit" class="btn btn-primary btn-lg" value="Delete game" name="action">
+        </form>
+    {% endif %}
+{% endblock content %}

@@ -1,11 +1,1044 @@
 {% extends "base.html" %}
+{% load static %}
+{% block head %}
+    <style>
+        p {
+            color: white;
+        }
+        div {
+            color: white;
+        }
+        .dpad-button {
+            width: 100%;
+            height: 100%;
+        }
+        .row {
+            min-height: 10vh;
+            font-size: 32px;
+            margin: 0;
+        }
+        .dpad-cell {
+            padding: 0;
+        }
+        body {
+            margin: 0;
+        }
+        #game {
+            margin: 0 auto 0 auto;
+        }
+        .game-container {
+            width: min-content;
+        }
+        .bonus-button {
+            min-height: 10vh;
+            width: 100%;
+            background-repeat: no-repeat;
+            background-size: 100% 100%;
+            margin: 7px;
+        }
+        .key-image {
+            width: 92%;
+            height: 92%;
+            margin: 4%;
+        }
+    </style>
+{% endblock head %}
 
 {% block content %}
     <h2>{{ name }}</h2>
     {% if type == "Monitor" %}
-        <form action="" method="post">
-            {% csrf_token %}
-            <input type="submit" class="btn btn-primary btn-lg" value="Delete game" name="action">
-        </form>
+        <div class="row">
+            <div class="col-xl-2">
+                <form action="" method="post">
+                    {% csrf_token %}
+                    <input type="submit" class="btn btn-primary btn-lg" value="Delete game" name="action">
+                </form>
+                <h1 id="winner"></h1>
+            </div>
+            <div class="col-xl-8" id="game">
+            </div>
+            <div class="col-xl-2"></div>
+        </div>
+
+        <script src="{% static 'js/pixijs.js' %}"></script>
+        <script src="{% static 'js/sound.js' %}"></script>
+        <script src="{% static 'js/animation.js' %}"></script>
+
+    <script type="text/javascript">
+
+        const app = new PIXI.Application({background: '#3333FF', width: 800, height: 600});
+        var groundContainer = new PIXI.Container();
+        var obstaclesContainer = new PIXI.Container();
+        var bonusContainer = new PIXI.Container();
+        var playersContainer = new PIXI.Container();
+        var fishesContainer = new PIXI.Container();
+        var animationsContainer = new PIXI.Container();
+        app.stage.addChild(groundContainer);
+        app.stage.addChild(obstaclesContainer);
+        app.stage.addChild(bonusContainer);
+        app.stage.addChild(animationsContainer);
+        document.getElementById("game").appendChild(app.view);
+
+        const mapConfig = {
+            tileSize: [80, 80],
+        }
+
+        var groundTiles = [];
+        var obstaclesTiles = [];
+        var bonusTiles = [];
+        var playersTiles = [];
+        var playersArr = [];
+        var fishes = [];
+        var moveCounter = 0;
+        const animationTimeMs = 700;
+        const animationTimeShortMs = 400;
+        var textures = {
+            bomb1: "{% static 'images/bomb1.png' %}",
+            bomb2: "{% static 'images/bomb2.png' %}",
+            bomb3: "{% static 'images/bomb3.png' %}",
+            bomb4: "{% static 'images/bomb4.png' %}",
+            bonus: "{% static 'images/bonus.png' %}",
+            explosion1: "{% static 'images/explosion1.png' %}",
+            explosion2: "{% static 'images/explosion2.png' %}",
+            explosion3: "{% static 'images/explosion3.png' %}",
+            goldenDoor: "{% static 'images/golden_door.png' %}",
+            goldenKey: "{% static 'images/golden_key.png' %}",
+            grass1: "{% static 'images/grass1.png' %}",
+            grass2: "{% static 'images/grass2.png' %}",
+            greyDoor: "{% static 'images/grey_door.png' %}",
+            greyKey: "{% static 'images/grey_key.png' %}",
+            player1: "{% static 'images/player_1.png' %}",
+            player2: "{% static 'images/player_2.png' %}",
+            player3: "{% static 'images/player_3.png' %}",
+            player4: "{% static 'images/player_4.png' %}",
+            playerFish1: "{% static 'images/player_1_fish.png' %}",
+            playerFish2: "{% static 'images/player_2_fish.png' %}",
+            playerFish3: "{% static 'images/player_3_fish.png' %}",
+            playerFish4: "{% static 'images/player_4_fish.png' %}",
+            stone1: "{% static 'images/stone1.png' %}",
+            stone2: "{% static 'images/stone2.png' %}",
+            fish: "{% static 'images/fish.png' %}",
+            finish: "{% static 'images/finish.png' %}",
+            tea: "{% static 'images/tea.png' %}"
+        };
+
+        const obstacles = {
+            1: [textures.greyDoor],
+            2: [textures.goldenDoor],
+            3: [textures.stone1, textures.stone2]
+        };
+
+        const soundEffects = {
+            boom: "{% static 'soundeffects/boom.wav' %}",
+            key: "{% static 'soundeffects/key.wav' %}",
+            openDoor: "{% static 'soundeffects/open_door.wav' %}",
+        }
+
+        const players = {
+            false: [
+                textures.player1,
+                textures.player2,
+                textures.player3,
+                textures.player4,
+            ],
+            true: [
+                textures.playerFish1,
+                textures.playerFish2,
+                textures.playerFish3,
+                textures.playerFish4,
+            ]
+        };
+
+        var animations = [];
+        var sounds = [];
+
+        Object.keys(textures).forEach(key => {
+            textures[key] = PIXI.Texture.from(textures[key]);
+        });
+
+        function choose(choices) {
+            let index = Math.floor(Math.random() * choices.length);
+            return choices[index];
+        }
+
+        const getMaps = () => {
+            $.ajax({
+                url: {% url 'get_monitor_data' %},
+                data: {},
+                success: (response) => {
+                    app.renderer.resize(response.ground_map.length * mapConfig.tileSize[0], response.ground_map[0].length * mapConfig.tileSize[1]);
+                    playersArr = response.players;
+                    animations = [];
+                    activeBonus = null;
+                    drawGroundMap(response.ground_map);
+                    drawObstaclesMap(response.obstacles_map);
+                    drawBonusMap(response.bonus_map);
+                    drawPlayers(response.players, response.player_animations);
+                    drawFishes(response.fishes_map);
+                    drawFinishes(response.finish_positions);
+                    fillBonusAnimations(response.bonus_animations);
+                    fillSounds(response.sound_effects);
+                    checkWinner(response.winner);
+                }
+            });
+        }
+        const fillSounds = (soundData) => {
+            sounds = [];
+            for (let s = 0; s < soundData.length; s++) {
+                let delay = currentMsOffset + soundData[s].delay * animationTimeMs;
+                switch (soundData[s].type) {
+                    case "boom":
+                        sounds.push(new SoundEffect(soundEffects.boom, delay));
+                    break;
+                    case "key":
+                        sounds.push(new SoundEffect(soundEffects.key, delay));
+                    break;
+                    case "open_door":
+                        sounds.push(new SoundEffect(soundEffects.openDoor, delay));
+                    break;
+                }
+            }
+        }
+        const checkWinner = (winnerData) => {
+            if (winnerData !== null) {
+                document.getElementById("winner").innerHTML = "Player " + winnerData["name"];
+            }
+        }
+        const drawGroundMap = (groundMap) => {
+            groundTiles = [];
+            groundContainer = new PIXI.Container();
+            for (let x = 0; x < groundMap.length; x++){
+                groundTiles.push([]);
+                for (let y = 0; y < groundMap[0].length; y++){
+                    if (groundMap[x][y] !== 0) {
+                        let tile = PIXI.Sprite.from(choose([textures.grass1, textures.grass2]));
+                        tile.x = x * mapConfig.tileSize[0];
+                        tile.y = y * mapConfig.tileSize[1];
+                        tile.height = mapConfig.tileSize[0];
+                        tile.width = mapConfig.tileSize[1];
+                        groundTiles[x].push(tile);
+                        groundContainer.addChild(tile);
+                    } else {
+                        groundTiles[x].push(null);
+                    }
+                }
+            }
+            app.stage.addChild(groundContainer);
+        }
+        const drawObstaclesMap = (obstaclesMap) => {
+            obstaclesTiles = [];
+            obstaclesContainer = new PIXI.Container();
+            for (let x = 0; x < obstaclesMap.length; x++){
+                obstaclesTiles.push([]);
+                for (let y = 0; y < obstaclesMap[0].length; y++){
+                    if (obstaclesMap[x][y] !== 0) {
+                        let tile = PIXI.Sprite.from(choose(obstacles[obstaclesMap[x][y]]));
+                        tile.x = x * mapConfig.tileSize[0];
+                        tile.y = y * mapConfig.tileSize[1];
+                        tile.height = mapConfig.tileSize[0];
+                        tile.width = mapConfig.tileSize[1];
+                        obstaclesTiles[x].push(tile);
+                        obstaclesContainer.addChild(tile);
+                    } else {
+                        obstaclesTiles[x].push(null);
+                    }
+                }
+            }
+            app.stage.addChild(obstaclesContainer);
+        }
+        const drawBonusMap = (bonusMap) => {
+            bonusTiles = [];
+            bonusContainer = new PIXI.Container();
+            for (let x = 0; x < bonusMap.length; x++){
+                bonusTiles.push([]);
+                for (let y = 0; y < bonusMap[0].length; y++){
+                    if (bonusMap[x][y] !== 0) {
+                        let tile = null;
+                        switch (bonusMap[x][y]) {
+                            case 1:
+                                tile = PIXI.Sprite.from(textures.greyKey);
+                            break;
+                            case 2:
+                                tile = PIXI.Sprite.from(textures.goldenKey);
+                            break;
+                            default:
+                                tile = PIXI.Sprite.from(textures.bonus);
+                            break;
+                        }
+                        tile.x = x * mapConfig.tileSize[0];
+                        tile.y = y * mapConfig.tileSize[1];
+                        tile.height = mapConfig.tileSize[0];
+                        tile.width = mapConfig.tileSize[1];
+                        bonusTiles[x].push(tile);
+                        bonusContainer.addChild(tile);
+                    } else {
+                        bonusTiles[x].push(null);
+                    }
+                }
+            }
+            app.stage.addChild(bonusContainer);
+        }
+        const drawFinishes = (finishLocations) => {
+            finishLocations.forEach(finish => {
+                let x = finish[0];
+                let y = finish[1];
+                let tile = PIXI.Sprite.from(textures.finish);
+                tile.x = x * mapConfig.tileSize[0];
+                tile.y = y * mapConfig.tileSize[1];
+                tile.height = mapConfig.tileSize[0];
+                tile.width = mapConfig.tileSize[1];
+                fishesContainer.addChild(tile);
+            });
+        }
+        const drawFishes = (fishesMap) => {
+            fishes = [];
+            destroyIfNotNull(fishesContainer);
+            fishesContainer = new PIXI.Container();
+            for (let x = 0; x < fishesMap.length; x++){
+                fishes.push([]);
+                for (let y = 0; y < fishesMap[0].length; y++){
+                    if (fishesMap[x][y] !== 0) {
+                        let tile = PIXI.Sprite.from(textures.fish);
+                        tile.x = x * mapConfig.tileSize[0];
+                        tile.y = y * mapConfig.tileSize[1];
+                        tile.height = mapConfig.tileSize[0];
+                        tile.width = mapConfig.tileSize[1];
+                        fishes[x].push(tile);
+                        fishesContainer.addChild(tile);
+                    } else {
+                        fishes[x].push(null);
+                    }
+                }
+            }
+            app.stage.addChild(fishesContainer);
+        }
+        const fillBonusAnimations = (bonusAnimationsData) => {
+            destroyIfNotNull(animationsContainer);
+            animationsContainer = new PIXI.Container();
+            for (let a = 0; a < bonusAnimationsData.length; a++) {
+                let singleAnimation = bonusAnimationsData[a];
+                switch (singleAnimation.type) {
+                    case "explosion":
+                        let expSprite = new PIXI.Sprite(textures.bomb1);
+                        expSprite.height = mapConfig.tileSize[0];
+                        expSprite.width = mapConfig.tileSize[1];
+                        let expAnimation = new SpriteAnimation(app, expSprite, true);
+                        console.log(singleAnimation);
+                        expAnimation.setAnimation(
+                            [
+                                [singleAnimation.to_pos[0] * mapConfig.tileSize[0], singleAnimation.to_pos[1] * mapConfig.tileSize[1]],
+                                [singleAnimation.to_pos[0] * mapConfig.tileSize[0], singleAnimation.to_pos[1] * mapConfig.tileSize[1]],
+                            ],
+                            [currentMsOffset + animationTimeMs * singleAnimation.anim_delay,
+                             currentMsOffset + animationTimeMs * singleAnimation.anim_delay + animationTimeShortMs],
+                            Ease.out,
+                            [
+                                textures.explosion1,
+                                textures.explosion2,
+                                textures.explosion3
+                            ]
+                        );
+                        animations.push(expAnimation);
+                        animationsContainer.addChild(expSprite);
+                    break;
+                    case "bomb":
+                        let bombSprite = new PIXI.Sprite(textures.bomb1);
+                        bombSprite.height = mapConfig.tileSize[0];
+                        bombSprite.width = mapConfig.tileSize[1];
+                        let bombAnimation = new SpriteAnimation(app, bombSprite, true);
+                        bombAnimation.setAnimation(
+                            [
+                                [singleAnimation.from_pos[0] * mapConfig.tileSize[0], singleAnimation.from_pos[1] * mapConfig.tileSize[1]],
+                                [singleAnimation.to_pos[0] * mapConfig.tileSize[0], singleAnimation.to_pos[1] * mapConfig.tileSize[1]],
+                            ],
+                            [currentMsOffset + animationTimeMs * singleAnimation.anim_delay,
+                             currentMsOffset + animationTimeMs * singleAnimation.anim_delay + animationTimeShortMs],
+                            Ease.no_ease,
+                            [
+                                textures.bomb1,
+                                textures.bomb2,
+                                textures.bomb3
+                            ]
+                        );
+                        animations.push(bombAnimation);
+                        animationsContainer.addChild(bombSprite);
+                    break;
+                    case "stone":
+                        let stoneSprite = new PIXI.Sprite(textures.stone1);
+                        stoneSprite.height = mapConfig.tileSize[0];
+                        stoneSprite.width = mapConfig.tileSize[1];
+                        let stoneAnimation = new SpriteAnimation(app, stoneSprite, true);
+                        stoneAnimation.setAnimation(
+                            [
+                                [singleAnimation.to_pos[0] * mapConfig.tileSize[0], singleAnimation.to_pos[1] * mapConfig.tileSize[1]],
+                                [singleAnimation.to_pos[0] * mapConfig.tileSize[0], singleAnimation.to_pos[1] * mapConfig.tileSize[1]],
+                            ],
+                            [currentMsOffset,
+                             currentMsOffset + animationTimeMs * singleAnimation.anim_delay],
+                            Ease.no_ease,
+                            [
+                                textures.stone1
+                            ]
+                        );
+                        animations.push(stoneAnimation);
+                        animationsContainer.addChild(stoneSprite);
+                }
+            }
+            app.stage.addChild(animationsContainer);
+        }
+        const drawPlayers = (playersData, animationsData) => {
+            playersTiles = [];
+            playersContainer = new PIXI.Container();
+            for (let p = 0; p < playersData.length; p++){
+
+                if (playersData[p] === null) {
+                    continue;
+                }
+                console.log(playersData[p].has_fish);
+                let tile = PIXI.Sprite.from(players[playersData[p].has_fish][p]);
+                tile.height = mapConfig.tileSize[0];
+                tile.width = mapConfig.tileSize[1];
+
+                if (!animationsData.hasOwnProperty(playersData[p].name)) {
+
+                    tile.x = playersData[p].x * mapConfig.tileSize[0];
+                    tile.y = playersData[p].y * mapConfig.tileSize[1];
+
+                } else {
+                    let animation = new SpriteAnimation(app, tile);
+                    animations.push(animation);
+                    console.log(animationsData);
+                    let animationData = animationsData[playersData[p].name];
+                    tile.x = animationData[0].from_pos[0] * mapConfig.tileSize[0];
+                    tile.y = animationData[0].from_pos[1] * mapConfig.tileSize[1];
+                    let positions = [];
+                    let timestamps = [currentMsOffset];
+                    let easeFuncs = [];
+                    for (let i = 0; i < animationData.length; i++) {
+                        positions.push([
+                            [animationData[i].from_pos[0] * mapConfig.tileSize[0], animationData[i].from_pos[1] * mapConfig.tileSize[1]],
+                            [animationData[i].to_pos[0] * mapConfig.tileSize[0], animationData[i].to_pos[1] * mapConfig.tileSize[1]]
+                        ]);
+                        timestamps.push(currentMsOffset + animationTimeMs * (animationData[i].anim_delay + 1));
+                        easeFuncs.push(Ease.in_out);
+                    }
+                    animation.setAnimationSequence(positions, timestamps, easeFuncs);
+                }
+                playersTiles.push(tile);
+                playersContainer.addChild(tile);
+            }
+            app.stage.addChild(playersContainer);
+        }
+        const checkMove = () => {
+            $.ajax({
+                url: {% url 'monitor_needs_update' %},
+                data: JSON.stringify({
+                    players_arr: playersArr,
+                    move_count: moveCounter
+                }),
+                success: (response) => {
+                    if (response.update) {
+                        moveCounter = response.move_count
+                        getMaps();
+                    }
+                }
+            });
+        }
+        const destroyIfNotNull = (a) => {
+            if (!a._destroyed) {a.destroy();}
+        }
+        const updateAnimations = (tick) => {
+            animations.forEach(animation => {
+                animation.frame(tick);
+            });
+        }
+        const updateSounds = (tick) => {
+            sounds.forEach(sound => {
+                sound.frame(tick);
+            });
+        }
+
+        var lastDate = new Date();
+        const startDate = new Date();
+        var currentMsOffset = new Date() - startDate;
+        var updateInterval = 700; // 700 ms
+        app.ticker.add((delta) => {
+            currentMsOffset = new Date() - startDate;
+            updateAnimations(currentMsOffset);
+            updateSounds(currentMsOffset);
+            if (new Date() - lastDate > updateInterval) {
+                lastDate = new Date();
+                checkMove();
+            }
+        });
+    </script>
+    {% else %} <!-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -->
+        <div class="game-container" id="game">
+        </div>
+        <div class="row">
+            <div class="col-8">
+                <div class="row">
+                    <div class="col-4 dpad-cell"></div>
+                    <div class="col-4 dpad-cell"><button class="dpad-button" onclick="clickDPAD(2)">UP</button></div>
+                    <div class="col-4 dpad-cell"></div>
+                </div>
+                <div class="row">
+                    <div class="col-4 dpad-cell"><button class="dpad-button" onclick="clickDPAD(3)">LEFT</button></div>
+                    <div class="col-4 dpad-cell"><button class="dpad-button" onclick="clickDPAD(1)">DOWN</button></div>
+                    <div class="col-4 dpad-cell"><button class="dpad-button" onclick="clickDPAD(0)">RIGHT</button></div>
+                </div>
+                <div class="row">
+                    <div class="col-4 dpad-cell" id="grey-door-key"></div>
+                    <div class="col-4 dpad-cell" id="golden-door-key"></div>
+                    <div class="col-4 dpad-cell" id="fish-key"></div>
+                </div>
+
+            </div>
+            <div class="col-4" id="bonuses">
+
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-6">
+                <button class="bonus-button" onclick="sendMove()">Ready</button>
+            </div>
+            <div class="col-6">
+                <button class="bonus-button" onclick="cancelBonus()">Cancel bonus</button>
+            </div>
+        </div>
+
+        <script src="{% static 'js/pixijs.js' %}"></script>
+        <script>
+        const app = new PIXI.Application({background: '#3333FF', width: 800, height: 600, antialias: true});
+        var groundContainer = new PIXI.Container();
+        var obstaclesContainer = new PIXI.Container();
+        var bonusContainer = new PIXI.Container();
+        var playersContainer = new PIXI.Container();
+        var moveContainer = new PIXI.Container();
+        var moveGraphics = new PIXI.Graphics();
+        var bonusGraphics = new PIXI.Graphics();
+        var bonusLine = new PIXI.Graphics();
+        var movePath = new PIXI.Graphics();
+        var finishContainer = new PIXI.Container();
+        var fishesContainer = new PIXI.Container();
+        var groundMap = [];
+        var obstaclesMap = [];
+        app.stage.addChild(groundContainer);
+        app.stage.addChild(obstaclesContainer);
+        app.stage.addChild(bonusContainer);
+        app.stage.addChild(moveGraphics);
+        app.stage.addChild(bonusGraphics);
+        app.stage.addChild(bonusLine);
+        app.stage.addChild(finishContainer);
+        app.stage.addChild(fishesContainer);
+        document.getElementById("game").appendChild(app.view);
+
+        const mapConfig = {
+            tileSize: [90, 90],
+        }
+
+        playerData = {
+            x: null,
+            y: null
+        }
+
+        var groundTiles = [];
+        var obstaclesTiles = [];
+        var bonusTiles = [];
+        var playersTiles = [];
+        var cursorMoves = [];
+        var fishes = [];
+        var moveCounter = 0;
+        var choosingBonus = false;
+        var activeBonus = null;
+
+        var textures = {
+            bomb1: "{% static 'images/bomb1.png' %}",
+            bomb2: "{% static 'images/bomb2.png' %}",
+            bomb3: "{% static 'images/bomb3.png' %}",
+            bomb4: "{% static 'images/bomb4.png' %}",
+            bonus: "{% static 'images/bonus.png' %}",
+            explosion1: "{% static 'images/explosion1.png' %}",
+            explosion2: "{% static 'images/explosion2.png' %}",
+            explosion3: "{% static 'images/explosion3.png' %}",
+            goldenDoor: "{% static 'images/golden_door.png' %}",
+            goldenKey: "{% static 'images/golden_key.png' %}",
+            grass1: "{% static 'images/grass1.png' %}",
+            grass2: "{% static 'images/grass2.png' %}",
+            greyDoor: "{% static 'images/grey_door.png' %}",
+            greyKey: "{% static 'images/grey_key.png' %}",
+            player1: "{% static 'images/player_1.png' %}",
+            player2: "{% static 'images/player_2.png' %}",
+            player3: "{% static 'images/player_3.png' %}",
+            player4: "{% static 'images/player_4.png' %}",
+            playerFish1: "{% static 'images/player_1_fish.png' %}",
+            playerFish2: "{% static 'images/player_2_fish.png' %}",
+            playerFish3: "{% static 'images/player_3_fish.png' %}",
+            playerFish4: "{% static 'images/player_4_fish.png' %}",
+            stone1: "{% static 'images/stone1.png' %}",
+            stone2: "{% static 'images/stone2.png' %}",
+            fish: "{% static 'images/fish.png' %}",
+            finish: "{% static 'images/finish.png' %}",
+            tea: "{% static 'images/tea.png' %}"
+        };
+
+        const obstacles = {
+            1: [textures.greyDoor],
+            2: [textures.goldenDoor],
+            3: [textures.stone1, textures.stone2]
+        }
+
+        const players = {
+            false: [
+                textures.player1,
+                textures.player2,
+                textures.player3,
+                textures.player4,
+            ],
+            true: [
+                textures.playerFish1,
+                textures.playerFish2,
+                textures.playerFish3,
+                textures.playerFish4,
+            ]
+        };
+
+        const bonusMaxDistance = {
+            100: 3,
+            101: 4,
+            102: 0
+        }
+
+        const buttons_borders = {
+            active: "7px solid #35cb00",
+            inactive: "0 solid #35cb00"
+        }
+
+        const bonuses_bg = {
+            100: "{% static 'images/bomb1.png' %}",
+            101: "{% static 'images/bonus.png' %}",
+            102: "{% static 'images/tea.png' %}"
+        }
+
+        Object.keys(textures).forEach(key => {
+            textures[key] = PIXI.Texture.from(textures[key]);
+        });
+
+        function choose(choices) {
+            let index = Math.floor(Math.random() * choices.length);
+            return choices[index];
+        }
+
+        const getMaps = () => {
+            $.ajax({
+                url: {% url 'get_player_data' %},
+                data: {},
+                success: (response) => {
+                    app.renderer.resize(response.ground_map.length * mapConfig.tileSize[0], response.ground_map[0].length * mapConfig.tileSize[1]);
+                    drawGroundMap(response.ground_map);
+                    drawObstaclesMap(response.obstacles_map);
+                    drawBonusMap(response.bonus_map);
+                    drawPlayers(response.players);
+                    drawBonuses(response.bonuses);
+                    drawFishes(response.fishes_map);
+                    drawKeys(response.player_keys);
+                    drawFinishes(response.finish_positions);
+                    groundMap = response.ground_map;
+                    obstaclesMap = response.obstacles_map;
+                    playerData.x = response.x_rel;
+                    playerData.y = response.y_rel;
+                    drawPlayersPointer([playerData.x, playerData.y]);
+                    cursorMoves = [[response.x_rel, response.y_rel]];
+                    destroyIfNotNull(movePath);
+                    movePath = new PIXI.Graphics();
+                    destroyIfNotNull(bonusLine);
+                    bonusLine = new PIXI.Graphics();
+                    destroyIfNotNull(bonusGraphics)
+                    bonusGraphics = new PIXI.Graphics();
+                    choosingBonus = false;
+                    activeBonus = null;
+                }
+            });
+        }
+        const drawPlayersPointer = (toPos) => {
+            moveGraphics.destroy();
+            moveGraphics = new PIXI.Graphics();
+            moveGraphics.lineStyle(6, 0xEE0000, 1);
+            moveGraphics.drawRect(
+                toPos[0] * mapConfig.tileSize[0] + 3,
+                toPos[1] * mapConfig.tileSize[1] + 3,
+                mapConfig.tileSize[0] - 3,
+                mapConfig.tileSize[1] - 3,
+            );
+            app.stage.addChild(moveGraphics);
+        }
+        const drawKeys = (keyData) => {
+            {#GreyDoorKey = 1#}
+            {#GoldenDoorKey = 2#}
+            {#Fish = 3#}
+            document.getElementById("grey-door-key").innerHTML = "";
+            document.getElementById("golden-door-key").innerHTML = "";
+            document.getElementById("fish-key").innerHTML = "";
+            if (keyData.includes(1)) {
+                let image = document.createElement("img");
+                image.src = "{% static 'images/grey_key.png' %}";
+                image.className = "key-image";
+                document.getElementById("grey-door-key").appendChild(image);
+            }
+            if (keyData.includes(2)) {
+                let image = document.createElement("img");
+                image.src = "{% static 'images/golden_key.png' %}";
+                image.className = "key-image";
+                document.getElementById("golden-door-key").appendChild(image);
+            }
+            if (keyData.includes(3)) {
+                let image = document.createElement("img");
+                image.src = "{% static 'images/fish.png' %}";
+                image.className = "key-image";
+                document.getElementById("fish-key").appendChild(image);
+            }
+        }
+        const drawBonusPointer = (toPos) => {
+            destroyIfNotNull(bonusGraphics);
+            bonusGraphics = new PIXI.Graphics();
+            bonusGraphics.lineStyle(6, 0xEE0099, 1);
+            bonusGraphics.drawRect(
+                toPos[0] * mapConfig.tileSize[0] + 3,
+                toPos[1] * mapConfig.tileSize[1] + 3,
+                mapConfig.tileSize[0] - 3,
+                mapConfig.tileSize[1] - 3,
+            );
+            app.stage.addChild(bonusGraphics);
+        }
+        const drawMoveLine = (fromPos, toPos) => {
+            movePath.lineStyle(4, 0xEE0000, 1);
+            movePath.moveTo(
+                fromPos[0] * mapConfig.tileSize[0] + Math.floor(mapConfig.tileSize[0] / 2),
+                fromPos[1] * mapConfig.tileSize[1] + Math.floor(mapConfig.tileSize[1] / 2)
+            );
+            movePath.lineTo(
+                toPos[0] * mapConfig.tileSize[0] + Math.floor(mapConfig.tileSize[0] / 2),
+                toPos[1] * mapConfig.tileSize[1] + Math.floor(mapConfig.tileSize[1] / 2)
+            );
+            movePath.closePath();
+            app.stage.addChild(movePath);
+        }
+        const drawBonusLine = (fromPos, toPos) => {
+            destroyIfNotNull(bonusLine);
+            bonusLine = new PIXI.Graphics();
+            bonusLine.lineStyle(4, 0xEE0099, 1);
+            bonusLine.moveTo(
+                fromPos[0] * mapConfig.tileSize[0] + Math.floor(mapConfig.tileSize[0] / 2),
+                fromPos[1] * mapConfig.tileSize[1] + Math.floor(mapConfig.tileSize[1] / 2)
+            );
+            bonusLine.lineTo(
+                toPos[0] * mapConfig.tileSize[0] + Math.floor(mapConfig.tileSize[0] / 2),
+                toPos[1] * mapConfig.tileSize[1] + Math.floor(mapConfig.tileSize[1] / 2)
+            );
+            bonusLine.closePath();
+            app.stage.addChild(bonusLine);
+        }
+        const drawBonuses = (bonuses) => {
+            let bonuses_el = document.getElementById("bonuses");
+            bonuses_el.innerHTML = "";
+            var c = 0;
+            bonuses.forEach(bonus => {
+                if (bonus != null) {
+                    let a = c;
+                    let button = document.createElement("button");
+                    button.addEventListener("click", () => {useBonus(bonus, a)});
+                    button.className = "bonus-button";
+                    button.style.backgroundImage = "url("+bonuses_bg[bonus]+")";
+                    bonuses_el.appendChild(button);
+                }
+                c = c + 1;
+            });
+        }
+        const drawFinishes = (finishLocations) => {
+            finishLocations.forEach(finish => {
+                let x = finish[0];
+                let y = finish[1];
+                let tile = PIXI.Sprite.from(textures.finish);
+                tile.x = x * mapConfig.tileSize[0];
+                tile.y = y * mapConfig.tileSize[1];
+                tile.height = mapConfig.tileSize[0];
+                tile.width = mapConfig.tileSize[1];
+                fishesContainer.addChild(tile);
+            });
+        }
+        const drawFishes = (fishesMap) => {
+            fishes = [];
+            destroyIfNotNull(fishesContainer);
+            fishesContainer = new PIXI.Container();
+            for (let x = 0; x < fishesMap.length; x++){
+                fishes.push([]);
+                for (let y = 0; y < fishesMap[0].length; y++){
+                    if (fishesMap[x][y] !== 0) {
+                        let tile = PIXI.Sprite.from(textures.fish);
+                        tile.x = x * mapConfig.tileSize[0];
+                        tile.y = y * mapConfig.tileSize[1];
+                        tile.height = mapConfig.tileSize[0];
+                        tile.width = mapConfig.tileSize[1];
+                        fishes[x].push(tile);
+                        fishesContainer.addChild(tile);
+                    } else {
+                        fishes[x].push(null);
+                    }
+                }
+            }
+            app.stage.addChild(fishesContainer);
+        }
+        const cancelBonus = () => {
+            let bonuses_el = document.getElementById("bonuses");
+            choosingBonus = false;
+            activeBonus = null;
+            Array.from(bonuses_el.children).forEach(child => {
+
+            });
+        }
+        const useBonus = (type, buttonNr) => {
+            let bonuses_el = document.getElementById("bonuses");
+            let counter = 0;
+            if (activeBonus !== null) {
+                if (activeBonus.button === buttonNr) {
+                    choosingBonus = false;
+                    bonuses_el.children[buttonNr].style.border = buttons_borders.inactive;
+                    return;
+                }
+            }
+            Array.from(bonuses_el.children).forEach(b => {
+                if (counter === buttonNr) {
+                    let a = counter;
+                    activeBonus = {
+                        button: a,
+                        type: type,
+                        on_move: cursorMoves.length - 1,
+                        from_x: cursorMoves[cursorMoves.length - 1][0],
+                        from_y: cursorMoves[cursorMoves.length - 1][1],
+                        to_x: cursorMoves[cursorMoves.length - 1][0],
+                        to_y: cursorMoves[cursorMoves.length - 1][1]
+                    };
+                    choosingBonus = true;
+                    destroyIfNotNull(bonusLine);
+                    destroyIfNotNull(bonusGraphics);
+                    b.style.border = buttons_borders.active;
+                } else {
+                    b.style.border = buttons_borders.inactive;
+                }
+                counter++;
+            })
+        }
+        const destroyIfNotNull = (a) => {
+            if (!a._destroyed) {a.destroy();}
+        }
+        const clickDPAD = (buttonNr) => {
+            let moves = [[1, 0], [0, 1], [0, -1], [-1, 0]];
+            let move = moves[buttonNr];
+            if (choosingBonus) {
+                let lastPos = [activeBonus.from_x, activeBonus.from_y];
+                let toPos = [activeBonus.to_x + move[0], activeBonus.to_y + move[1]];
+                if (outOfBounds(toPos[0], toPos[1])) {return;}
+                if (tooLongDistance(lastPos[0], lastPos[1], toPos[0], toPos[1], bonusMaxDistance[activeBonus.type])) {return;}
+                activeBonus.to_x = toPos[0];
+                activeBonus.to_y = toPos[1];
+                drawBonusPointer(toPos);
+                drawBonusLine(lastPos, toPos);
+            } else {
+                if (cursorMoves.length >= 4) {return;}
+                let lastPos = cursorMoves[cursorMoves.length - 1];
+                let toPos = [lastPos[0] + move[0], lastPos[1] + move[1]];
+                if (!playerCanStandHere(toPos[0], toPos[1])) {
+                    return;
+                }
+                cursorMoves.push([toPos[0], toPos[1]]);
+                drawPlayersPointer(toPos);
+                drawMoveLine(lastPos, toPos);
+            }
+        }
+        const playerCanStandHere = (x, y) => {
+            if (outOfBounds(x, y)) {
+                return false;
+            }
+            if (groundMap[x][y] !== 1) {
+                return false;
+            }
+            return true;
+        }
+        const outOfBounds = (x, y) => {
+            return (
+                x > groundTiles.length - 1 ||
+                x < 0 ||
+                y > groundTiles[0].length - 1 ||
+                y < 0
+            )
+        }
+        const sendMove = () => {
+            if (cursorMoves.length !== 4) {return;}
+            req = {
+                url: {% url 'set_move' %},
+                data: {
+                    move: {
+                        path: movesToMovesPath(cursorMoves),
+                        bonus:{
+                            active: false
+                        }
+                    }
+                },
+                success: (response) => {
+                    console.log(response);
+                }
+            }
+            if (activeBonus != null) {
+                req.data.move.bonus = {
+                    to_offset: absToRel([activeBonus.from_x, activeBonus.from_y], [activeBonus.to_x, activeBonus.to_y]),
+                    type: activeBonus.type,
+                    active: true,
+                    on_move: activeBonus.on_move,
+                }
+            }
+            req.data = JSON.stringify(req.data);
+            console.log(req);
+            $.ajax(req);
+        }
+        const tooLongDistance = (x, y, toX, toY, distance) => {
+            return (
+                Math.abs(x - toX) > distance ||
+                Math.abs(y - toY) > distance
+            )
+        }
+        const movesToMovesPath = (moves) => {
+            let path = [];
+            for (let i = 0; i < moves.length - 1; i++) {
+                path.push([moves[i + 1][0] - moves[i][0], moves[i + 1][1] - moves[i][1]]);
+            }
+            return path;
+        }
+        const absToRel = (from, to) => {
+            return [to[0] - from[0], to[1] - from[1]]
+        }
+        const cancelMove = () => {
+            activeBonus = null;
+            cursorMoves = [[playerData.x, playerData.y]];
+        }
+        const drawGroundMap = (groundMap) => {
+            groundTiles = [];
+            groundContainer.destroy();
+            groundContainer = new PIXI.Container();
+            for (let x = 0; x < groundMap.length; x++){
+                groundTiles.push([]);
+                for (let y = 0; y < groundMap[0].length; y++){
+                    if (groundMap[x][y] !== 0) {
+                        let tile = PIXI.Sprite.from(choose([textures.grass1, textures.grass2]));
+                        tile.x = x * mapConfig.tileSize[0];
+                        tile.y = y * mapConfig.tileSize[1];
+                        tile.height = mapConfig.tileSize[0];
+                        tile.width = mapConfig.tileSize[1];
+                        groundTiles[x].push(tile);
+                        groundContainer.addChild(tile);
+                    } else {
+                        groundTiles[x].push(null);
+                    }
+                }
+            }
+            app.stage.addChild(groundContainer);
+        }
+        const drawObstaclesMap = (obstaclesMap) => {
+            obstaclesTiles = [];
+            obstaclesContainer.destroy();
+            obstaclesContainer = new PIXI.Container();
+            for (let x = 0; x < obstaclesMap.length; x++){
+                obstaclesTiles.push([]);
+                for (let y = 0; y < obstaclesMap[0].length; y++){
+                    if (obstaclesMap[x][y] !== 0) {
+                        let tile = PIXI.Sprite.from(choose(obstacles[obstaclesMap[x][y]]));
+                        tile.x = x * mapConfig.tileSize[0];
+                        tile.y = y * mapConfig.tileSize[1];
+                        tile.height = mapConfig.tileSize[0];
+                        tile.width = mapConfig.tileSize[1];
+                        obstaclesTiles[x].push(tile);
+                        obstaclesContainer.addChild(tile);
+                    } else {
+                        obstaclesTiles[x].push(null);
+                    }
+                }
+            }
+            app.stage.addChild(obstaclesContainer);
+        }
+        const drawBonusMap = (bonusMap) => {
+            bonusTiles = [];
+            bonusContainer.destroy();
+            bonusContainer = new PIXI.Container();
+            for (let x = 0; x < bonusMap.length; x++){
+                bonusTiles.push([]);
+                for (let y = 0; y < bonusMap[0].length; y++){
+                    if (bonusMap[x][y] !== 0) {
+                        let tile = null;
+                        switch (bonusMap[x][y]) {
+                            case 1:
+                                tile = PIXI.Sprite.from(textures.greyKey);
+                            break;
+                            case 2:
+                                tile = PIXI.Sprite.from(textures.goldenKey);
+                            break;
+                            default:
+                                tile = PIXI.Sprite.from(textures.bonus);
+                            break;
+                        }
+                        tile.x = x * mapConfig.tileSize[0];
+                        tile.y = y * mapConfig.tileSize[1];
+                        tile.height = mapConfig.tileSize[0];
+                        tile.width = mapConfig.tileSize[1];
+                        bonusTiles[x].push(tile);
+                        bonusContainer.addChild(tile);
+                    } else {
+                        bonusTiles[x].push(null);
+                    }
+                }
+            }
+            app.stage.addChild(bonusContainer);
+        }
+        const drawPlayers = (playersData) => {
+            console.log(playersData);
+            playersTiles = [];
+            playersContainer.destroy();
+            playersContainer = new PIXI.Container();
+            for (let p = 0; p < playersData.length; p++){
+                if (playersData[p] === null) {
+                    continue;
+                }
+                let tile = PIXI.Sprite.from(players[playersData[p].has_fish][p]);
+                tile.x = playersData[p].x * mapConfig.tileSize[0];
+                tile.y = playersData[p].y * mapConfig.tileSize[1];
+                tile.height = mapConfig.tileSize[0];
+                tile.width = mapConfig.tileSize[1];
+                playersTiles.push(tile);
+                playersContainer.addChild(tile);
+            }
+            app.stage.addChild(playersContainer);
+        }
+        const checkMove = () => {
+            $.ajax({
+                data: {},
+                url: "{% url 'get_move_count' %}",
+                success: (response) => {
+                    if (response.move_count > moveCounter) {
+                        getMaps();
+                        moveCounter = response.move_count;
+                    }
+                }
+            });
+        }
+        getMaps();
+
+        var lastDate = new Date();
+        var updateInterval = 700; // 700 ms
+        app.ticker.add((delta) => {
+            if (new Date() - lastDate > updateInterval) {
+                lastDate = new Date();
+                checkMove();
+            }
+        });
+    </script>
     {% endif %}
+
 {% endblock content %}

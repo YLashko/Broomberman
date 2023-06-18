@@ -1,15 +1,18 @@
 from main.Game import Game
+import json
 
 
 class ServerGlobalData:
     def __init__(self):
         self.games: dict[str, Game] = {}
-        self.users_games = {}
+        self.users_games: dict[str, str] = {}
 
     def add_game(self, game_config, user_name):
         if game_config["name"] in self.games.keys():
             raise ValueError("The game with the specified name already exists!")
-        self.games[game_config["name"]] = Game(game_config, user_name)
+        with open("main/maps/map1.json", "r") as f:
+            game_map_data = json.loads(f.read())
+        self.games[game_config["name"]] = Game(game_config, user_name, game_map_data)
         self.users_games[user_name] = game_config["name"]
 
     def remove_game(self, game_name, user):
@@ -42,7 +45,13 @@ class ServerGlobalData:
     def get_user_game(self, user_name):
         if user_name not in self.users_games.keys():
             return None
+        if self.get_user_game_name(user_name) is None:
+            return None
         return self.games[self.get_user_game_name(user_name)]
+
+    def set_player_move(self, player_name, move):
+        game = self.get_user_game(player_name)
+        game.player_ready(player_name, move)
 
     def get_games_names(self):
         return list(self.games.keys())

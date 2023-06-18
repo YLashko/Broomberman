@@ -1,3 +1,4 @@
+import json
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from main.ServerGlobalData import ServerGlobalData
@@ -5,8 +6,13 @@ from main.forms import UserForm
 from django.contrib.auth import authenticate, logout, login
 from django.contrib.auth.models import User
 from main.models import Profile
+from django.http import JsonResponse
 
 sgd = ServerGlobalData()
+
+
+def is_ajax(request):
+    return request.headers.get('x-requested-with') == 'XMLHttpRequest'
 
 
 def main(request):
@@ -78,15 +84,71 @@ def new_game(request):
             "name": request.POST.get("name"),
             "passphrase": request.POST.get("password")
         }
-        try:
-            sgd.add_game(game_config, request.user.username)
-            profile = Profile.objects.get(user=request.user)
-            profile.game = game_config["name"]
-            profile.save()
-            return redirect("game")
-        except Exception as e:
-            messages.error(request, e)
+        sgd.add_game(game_config, request.user.username)
+        profile = Profile.objects.get(user=request.user)
+        profile.game = game_config["name"]
+        profile.save()
+        return redirect("game")
     return render(request, "new_game.html", {})
+
+
+def get_monitor_data(request):
+    global sgd
+    if not is_ajax(request):
+        return redirect("main")
+    user = request.user.username
+    game = sgd.get_user_game(user)
+    response = game.monitor_data()
+    return JsonResponse(response)
+
+
+def get_move_count(request):
+    global sgd
+    if not is_ajax(request):
+        return redirect("main")
+    user = request.user.username
+    game = sgd.get_user_game(user)
+    if game is None:
+        return redirect("main")
+    response = {"move_count": game.move_counter}
+    return JsonResponse(response)
+
+
+def monitor_needs_update(request):
+    global sgd
+    if not is_ajax(request):
+        return redirect("main")
+    response = {}
+    user = request.user.username
+    game = sgd.get_user_game(user)
+    if game is None:
+        return redirect("main")
+    players_arr = json.loads(list(request.GET.keys())[0])["players_arr"]
+    move_count = json.loads(list(request.GET.keys())[0])["move_count"]
+    non_none = len(players_arr) - players_arr.count(None)
+    response["update"] = len(game.non_none_players()) != non_none or move_count < game.get_move_count()
+    response["move_count"] = game.get_move_count()
+    return JsonResponse(response)
+
+
+def set_player_move(request):
+    global sgd
+    if not is_ajax(request):
+        return redirect("main")
+    move = json.loads(list(request.GET.keys())[0])["move"]
+    sgd.set_player_move(request.user.username, move)
+    return JsonResponse({"success": True})
+
+
+def get_player_data(request):
+    global sgd
+    if not is_ajax(request):
+        return redirect("main")
+    user = request.user.username
+    game = sgd.get_user_game(user)
+    response = game.player_data(user)
+
+    return JsonResponse(response)
 
 
 def game_view(request):
@@ -103,7 +165,8 @@ def game_view(request):
             context = game.monitor_data()
             return render(request, "game.html", context)
         else:
-            context = game.player_data()
+            context = game.player_data(request.user.username)
             return render(request, "game.html", context)
     except Exception as e:
         messages.error(request, e)
+    return render(request, "game.html", {})

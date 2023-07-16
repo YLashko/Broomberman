@@ -82,14 +82,23 @@ def new_game(request):
     if request.method == "POST":
         game_config = {
             "name": request.POST.get("name"),
-            "passphrase": request.POST.get("password")
+            "passphrase": request.POST.get("password"),
+            "map_name": request.POST.get("map_name"),
         }
         sgd.add_game(game_config, request.user.username)
         profile = Profile.objects.get(user=request.user)
         profile.game = game_config["name"]
         profile.save()
         return redirect("game")
-    return render(request, "new_game.html", {})
+    context = {
+        "maps": []
+    }
+    for index, map_ in sgd.maps.items():
+        context["maps"].append({
+            "name": index,
+            "image": "images/previews/" + map_["image_name"]
+        })
+    return render(request, "new_game.html", context)
 
 
 def get_monitor_data(request):
@@ -128,6 +137,7 @@ def monitor_needs_update(request):
     non_none = len(players_arr) - players_arr.count(None)
     response["update"] = len(game.non_none_players()) != non_none or move_count < game.get_move_count()
     response["move_count"] = game.get_move_count()
+    response["players_ready"] = game.get_players_ready_status()
     return JsonResponse(response)
 
 

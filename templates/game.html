@@ -57,7 +57,10 @@
             </div>
             <div class="col-xl-8" id="game">
             </div>
-            <div class="col-xl-2"></div>
+            <div class="col-xl-2">
+                <h1>Players:</h1>
+                <div id="players-status"></div>
+            </div>
         </div>
 
         <script src="{% static 'js/pixijs.js' %}"></script>
@@ -80,7 +83,7 @@
         document.getElementById("game").appendChild(app.view);
 
         const mapConfig = {
-            tileSize: [80, 80],
+            tileSize: [64, 64],
         }
 
         var groundTiles = [];
@@ -412,14 +415,14 @@
                     tile.x = animationData[0].from_pos[0] * mapConfig.tileSize[0];
                     tile.y = animationData[0].from_pos[1] * mapConfig.tileSize[1];
                     let positions = [];
-                    let timestamps = [currentMsOffset];
+                    let timestamps = [currentMsOffset + animationTimeMs * 0.5];
                     let easeFuncs = [];
                     for (let i = 0; i < animationData.length; i++) {
                         positions.push([
                             [animationData[i].from_pos[0] * mapConfig.tileSize[0], animationData[i].from_pos[1] * mapConfig.tileSize[1]],
                             [animationData[i].to_pos[0] * mapConfig.tileSize[0], animationData[i].to_pos[1] * mapConfig.tileSize[1]]
                         ]);
-                        timestamps.push(currentMsOffset + animationTimeMs * (animationData[i].anim_delay + 1));
+                        timestamps.push(currentMsOffset + animationTimeMs * (animationData[i].anim_delay + 1.5));
                         easeFuncs.push(Ease.in_out);
                     }
                     animation.setAnimationSequence(positions, timestamps, easeFuncs);
@@ -429,6 +432,16 @@
             }
             app.stage.addChild(playersContainer);
         }
+        const displayPlayersStatus = (playersStatus) => {
+            let playersStatusDiv = document.getElementById("players-status");
+            playersStatusDiv.innerHTML = "";
+            Object.keys(playersStatus).forEach(key => {
+                let pstatus = document.createElement("h1");
+                pstatus.innerHTML = key;
+                pstatus.style.color = playersStatus[key] ? "#5ed945" : "#a1a1a1";
+                playersStatusDiv.appendChild(pstatus);
+            });
+        }
         const checkMove = () => {
             $.ajax({
                 url: {% url 'monitor_needs_update' %},
@@ -437,6 +450,7 @@
                     move_count: moveCounter
                 }),
                 success: (response) => {
+                    displayPlayersStatus(response.players_ready);
                     if (response.update) {
                         moveCounter = response.move_count
                         getMaps();
@@ -500,7 +514,7 @@
         </div>
         <div class="row">
             <div class="col-6">
-                <button class="bonus-button" onclick="sendMove()">Ready</button>
+                <button class="bonus-button" id="ready-button" onclick="sendMove()">Ready</button>
             </div>
             <div class="col-6">
                 <button class="bonus-button" onclick="cancelBonus()">Cancel bonus</button>
@@ -657,6 +671,7 @@
                     bonusGraphics = new PIXI.Graphics();
                     choosingBonus = false;
                     activeBonus = null;
+                    document.getElementById("ready-button").style.backgroundColor = "#FFFFFF";
                 }
             });
         }
@@ -799,7 +814,7 @@
         const useBonus = (type, buttonNr) => {
             let bonuses_el = document.getElementById("bonuses");
             let counter = 0;
-            if (activeBonus !== null) {
+            if (activeBonus !== null && choosingBonus) {
                 if (activeBonus.button === buttonNr) {
                     choosingBonus = false;
                     bonuses_el.children[buttonNr].style.border = buttons_borders.inactive;
@@ -874,6 +889,7 @@
         }
         const sendMove = () => {
             if (cursorMoves.length !== 4) {return;}
+            document.getElementById("ready-button").style.backgroundColor = "#5ed945";
             req = {
                 url: {% url 'set_move' %},
                 data: {

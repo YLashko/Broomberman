@@ -1,24 +1,76 @@
 {% extends 'base.html' %}
+{% load static %}
+{% block head %}
+    <style>
+        .map {
+            border-radius: 7px;
+            border: 1px solid #444444;
+            margin: 4px;
+            width: min-content;
+        }
+        .maps {
+            display: flex;
+        }
+        .map-name {
+            position: relative;
+            padding: 0;
+            margin: 0;
+            top: 3px;
+            left: 3px;
+            text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000;
+            height: 0;
+            z-index: 10;
+        }
+        .preview-image {
+            height: 400px;
+            width: auto;
+        }
+    </style>
+{% endblock head %}
 {% block content %}
     <a class="btn btn-danger" href="{% url 'main' %}">Back to main page</a>
     <h2>Create a new game (this device will be a monitor for this game)</h2>
     <form action="" method="post">
         {% csrf_token %}
         <div class="row">
-            <div class="col-lg-6">
+            <div class="col-lg-4">
                 <div class="input-group mb-3">
                     <span class="input-group-text" id="inputGroup-sizing-default">Name</span>
                     <input type="text" class="form-control" name="name" aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default">
                 </div>
             </div>
-            <div class="col-lg-6">
+            <div class="col-lg-4">
                 <div class="input-group mb-3">
                     <span class="input-group-text" id="inputGroup-sizing-default">Passphrase</span>
                     <input type="password" class="form-control" name="password" aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default">
                 </div>
             </div>
+            <div class="col-lg-4">
+                <div class="input-group mb-3">
+                    <span class="input-group-text" id="inputGroup-sizing-default">Map name</span>
+                    <input type="text" class="form-control" id="map-input" name="map_name" readonly aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default">
+                </div>
+            </div>
         </div>
-
-            <input type="submit" class="btn btn-primary btn-lg" name="action" value="Create">
+        <div class="maps">
+            {% for map in maps %}
+                <div class="map" onclick="selectMap(this, '{{ map.name }}')">
+                    <h2 class="map-name">{{ map.name }}</h2>
+                    <img class="preview-image" src="{% static map.image %}">
+                </div>
+            {% endfor %}
+        </div>
+        <input type="submit" class="btn btn-primary btn-lg" name="action" value="Create">
     </form>
+    <script>
+    const selectMap = (mapElement, mapName) => {
+        let mapInput = document.getElementById("map-input");
+        mapInput.value = mapName;
+        let mapDivs = document.getElementsByClassName("map");
+        Array.from(mapDivs).forEach(el => {
+            el.style.boxShadow = "0px 0px 0px 0px #FFFFFF";
+        });
+        mapElement.style.boxShadow = "0px 0px 0px 4px #FFFFFF";
+    }
+    </script>
 {% endblock content %}

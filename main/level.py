@@ -13,7 +13,6 @@ class GameLevel:
         self.obstacles = ObstaclesLayer(size)
         self.bonuses = BonusLayer(size)
         self.fishes = FishLayer(size)
-        print(size)
 
     def set_ground_map(self, level_map):
         self.ground.set_level_map(level_map)

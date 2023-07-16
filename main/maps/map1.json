@@ -1,7 +1,9 @@
 {
   "starting_positions": [[0, 0], [1, 0], [2, 0], [3, 0]],
-  "size": [12, 10],
+  "size": [10, 12],
   "finish_positions": [[3, 4]],
+  "map_name": "Test map",
+  "image_name": "tm.png",
   "ground_map": [
     [1, 1, 1, 1, 1, 0, 1, 1, 1, 1],
     [1, 1, 1, 1, 1, 0, 1, 1, 1, 1],
@@ -58,5 +60,7 @@
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [102, 0, 0, 0, 1, 0, 0, 0, 0, 0]
   ],
-  "starting_random_bonuses": 4
+  "starting_random_bonuses": 4,
+  "bonus_spawn_delay": 3,
+  "bonus_spawn_amount": 7
 }

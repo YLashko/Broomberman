@@ -5,6 +5,14 @@ from main.level import GameLevel
 from random import shuffle
 
 
+def transpose(map_):
+    return [list(a) for a in list(zip(*map_))]
+
+
+def transpose_pos(pos):
+    return [pos[1], pos[0]]
+
+
 class Game:
     def __init__(self, config, user, game_map):
         self.player_animations = {}
@@ -14,9 +22,9 @@ class Game:
         self.max_players = 4
         self.moves = 3
         self.game_map_config = game_map
-        self.starting_positions = game_map["starting_positions"]
+        self.starting_positions = [a for a in game_map["starting_positions"]]
         self.level = GameLevel(game_map["size"])
-        self.finish_positions = game_map["finish_positions"]
+        self.finish_positions = [a for a in game_map["finish_positions"]]
         self.bonus_arr = []
         self.winner = None
         self.bonus_animations = []
@@ -26,6 +34,8 @@ class Game:
         self.tea_coords = None
         self.running = True
         self.move_counter = 0
+        self.bonuses_period_amount = game_map["bonus_spawn_amount"]
+        self.bonuses_period_delay = game_map["bonus_spawn_delay"]
         self.configure()
 
     def role(self, user_name):
@@ -39,22 +49,26 @@ class Game:
         self.passphrase = self.config["passphrase"]
         keys = list(self.game_map_config.keys())
         if "ground_map" in keys:
-            self.level.ground.set_level_map(self.game_map_config["ground_map"])
+            self.level.ground.set_level_map(transpose(self.game_map_config["ground_map"]))
         if "obstacles_map" in keys:
-            self.level.obstacles.set_level_map(self.game_map_config["obstacles_map"])
+            self.level.obstacles.set_level_map(transpose(self.game_map_config["obstacles_map"]))
         if "bonuses_map" in keys:
-            self.level.bonuses.set_level_map(self.game_map_config["bonuses_map"])
+            self.level.bonuses.set_level_map(transpose(self.game_map_config["bonuses_map"]))
         if "fishes_map" in keys:
-            self.level.set_fishes_map(self.game_map_config["fishes_map"])
+            self.level.set_fishes_map(transpose(self.game_map_config["fishes_map"]))
         if "starting_random_bonuses" in keys:
             self.level.place_random_bonuses(self.game_map_config["starting_random_bonuses"])
 
     def start(self):
         self.running = True
 
+    def place_bonuses_period(self):
+        if (self.move_counter + 1) % self.bonuses_period_delay == 1:
+            self.level.place_random_bonuses(self.bonuses_period_amount)
+
     def check_ready(self):
         if all(
-            [player.ready for player in self.players if player is not None]
+                [player.ready for player in self.players if player is not None]
         ) and self.get_players_count() != 0:
             self.outcome()
             self.move_counter += 1
@@ -82,6 +96,7 @@ class Game:
         self.bonus_animations = []
         self.sound_effects = []
         self.reset_player_animations()
+
         for move in range(self.moves):
             for player in self.non_none_players():
                 self.check_bonus(player, move)
@@ -95,12 +110,27 @@ class Game:
         for player in self.non_none_players():
             self.check_bonus(player, self.moves)
         self.outcome_bonuses(self.moves)
+
+        self.execute_tea()
+        self.place_bonuses_period()
+        self.reset_moves()
+
+    def execute_tea(self):
         if self.tea_coords is not None:
             for player in self.non_none_players():
                 player.move_to(self.tea_coords[0], self.tea_coords[1])
+                self.player_animations[player.name].append({
+                    "from_pos": [player.cx, player.cy],
+                    "to_pos": self.tea_coords,
+                    "anim_delay": 4
+                })
             self.tea_coords = None
 
-    def non_none_players(self):
+    def reset_moves(self):
+        for player in self.non_none_players():
+            player.move = None
+
+    def non_none_players(self) -> list[Player]:
         return [player for player in self.players if player is not None]
 
     def reset_player_animations(self):
@@ -140,7 +170,7 @@ class Game:
                     if not self.level.out_of_bounds(lx, ly):
                         self.stoneAnimation(lx, ly, anim_delay)
                         self.level.obstacles.remove_rock(lx, ly)
-                        self.move_to_start(lx, ly)
+                        self.move_to_start(lx, ly, anim_delay)
                         self.bonus_animations.append({
                             "type": "explosion",
                             "to_pos": [lx, ly],
@@ -168,7 +198,7 @@ class Game:
                 for x in range(min(fx, fx + lx) + additional_offset, max(fx, fx + lx) + additional_offset):
                     self.stoneAnimation(lx, ly, anim_delay)
                     self.level.obstacles.remove_rock(x, fy)
-                    self.move_to_start(x, fy)
+                    self.move_to_start(x, fy, anim_delay)
                     self.bonus_animations.append({
                         "type": "explosion",
                         "to_pos": [x, fy],
@@ -178,7 +208,7 @@ class Game:
                 additional_offset = 1 if ly > 0 else 0
                 for y in range(min(fy, fy + ly) + additional_offset, max(fy, fy + ly) + additional_offset):
                     self.level.obstacles.remove_rock(fx, y)
-                    self.move_to_start(fx, y)
+                    self.move_to_start(fx, y, anim_delay)
                     self.bonus_animations.append({
                         "type": "explosion",
                         "to_pos": [fx, y],
@@ -190,13 +220,18 @@ class Game:
                 "delay": anim_delay + 0.5,
             })
 
-    def move_to_start(self, x, y):
+    def move_to_start(self, x, y, index):
         for i, player in enumerate(self.players):
             if player is None:
                 continue
             if player.cx == x and player.cy == y:
                 self.remove_gold_key(player)
                 self.remove_fish(player)
+                self.player_animations[player.name].append({
+                    "from_pos": [player.cx, player.cy],
+                    "to_pos": self.starting_positions[i],
+                    "anim_delay": index
+                })
                 player.move_to(self.starting_positions[i][0], self.starting_positions[i][1])
 
     def remove_fish(self, player):
@@ -311,7 +346,19 @@ class Game:
     def player_index(self, player_name):
         return self.players_names.index(player_name)
 
+    def fill_empty_player_animations(self):
+        for player in self.non_none_players():
+            if player.name not in self.player_animations:
+                self.player_animations[player.name] = []
+            if len(self.player_animations[player.name]) == 0:
+                self.player_animations[player.name].append({
+                    "from_pos": [player.cx, player.cy],
+                    "to_pos": [player.cx, player.cy],
+                    "anim_delay": 0
+                })
+
     def monitor_data(self):
+        self.fill_empty_player_animations()
         return {
             "type": "Monitor",
             "name": self.name,
@@ -359,18 +406,21 @@ class Game:
                 [p[0] - from_x, p[1] - from_y]
                 for p in self.finish_positions
                 if 0 <= p[0] - from_x < size
-                and 0 <= p[1] - from_y < size
+                   and 0 <= p[1] - from_y < size
             ]
         }
 
+    def get_players_ready_status(self):
+        return {player.name: player.ready for player in self.non_none_players()}
+
     def gather_player_data(self):
         return [{
-            "name": p.name,
-            "index": p.index,
-            "has_fish": Bonuses.Fish in p.keys,
-            "x": p.cx,
-            "y": p.cy
-        } if p is not None else None for p in self.players]
+                    "name": p.name,
+                    "index": p.index,
+                    "has_fish": Bonuses.Fish in p.keys,
+                    "x": p.cx,
+                    "y": p.cy
+                } if p is not None else None for p in self.players]
 
     @property
     def players_names(self):

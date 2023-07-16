@@ -1,17 +1,33 @@
 from main.Game import Game
 import json
+import os
 
 
 class ServerGlobalData:
     def __init__(self):
         self.games: dict[str, Game] = {}
         self.users_games: dict[str, str] = {}
+        self.maps = {}
+        self.load_maps()
+
+    def load_maps(self, path="main/maps/"):
+
+        def get_files_from_folder(folder_path):
+            files = []
+            for path in os.listdir(folder_path):
+                if os.path.isfile(file := os.path.join(folder_path, path)):
+                    files.append(file)
+            return files
+
+        for file in get_files_from_folder(path):
+            with open(file, "r") as map_file:
+                game_map_data = json.loads(map_file.read())
+                self.maps[game_map_data["map_name"]] = game_map_data
 
     def add_game(self, game_config, user_name):
         if game_config["name"] in self.games.keys():
             raise ValueError("The game with the specified name already exists!")
-        with open("main/maps/map1.json", "r") as f:
-            game_map_data = json.loads(f.read())
+        game_map_data = self.maps[game_config["map_name"]]
         self.games[game_config["name"]] = Game(game_config, user_name, game_map_data)
         self.users_games[user_name] = game_config["name"]
 

@@ -6,7 +6,7 @@ class Player:
         self.index = index
         self.keys = set()
         self.move = None
-        self.bonuses = [101, 100, 102]
+        self.bonuses = []
 
     def __str__(self):
         return self.name

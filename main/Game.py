@@ -34,8 +34,8 @@ class Game:
         self.tea_coords = None
         self.running = True
         self.move_counter = 0
-        self.bonuses_period_amount = game_map["bonus_spawn_amount"]
-        self.bonuses_period_delay = game_map["bonus_spawn_delay"]
+        self.bonuses_period_amount = config["bonus_spawn_amount"]
+        self.bonuses_period_delay = config["bonus_spawn_delay"]
         self.configure()
 
     def role(self, user_name):
@@ -63,7 +63,7 @@ class Game:
         self.running = True
 
     def place_bonuses_period(self):
-        if (self.move_counter + 1) % self.bonuses_period_delay == 1:
+        if (self.move_counter + 1) % self.bonuses_period_delay == 0 and self.move_counter != 0:
             self.level.place_random_bonuses(self.bonuses_period_amount)
 
     def check_ready(self):

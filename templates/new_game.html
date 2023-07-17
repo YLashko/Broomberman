@@ -25,6 +25,12 @@
             height: 400px;
             width: auto;
         }
+        .bonus-num-input {
+            background-color: #1b1b1b;
+            color: white;
+            width: 100px;
+            border-radius: 7px;
+        }
     </style>
 {% endblock head %}
 {% block content %}
@@ -48,9 +54,12 @@
             <div class="col-lg-4">
                 <div class="input-group mb-3">
                     <span class="input-group-text" id="inputGroup-sizing-default">Map name</span>
-                    <input type="text" class="form-control" id="map-input" name="map_name" readonly aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default">
+                    <input type="text" class="form-control" id="map-input" required name="map_name" readonly aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default">
                 </div>
             </div>
+        </div>
+        <div class="row">
+            <h2>Try to spawn <input class="bonus-num-input" value="7" type="number" min="0" max="100" name="bonus_spawn_amount" /> bonuses every <input type="number" class="bonus-num-input" value="3" min="1" max="100" name="bonus_spawn_delay" /> turns.</h2>
         </div>
         <div class="maps">
             {% for map in maps %}

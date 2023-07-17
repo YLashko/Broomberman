@@ -84,6 +84,8 @@ def new_game(request):
             "name": request.POST.get("name"),
             "passphrase": request.POST.get("password"),
             "map_name": request.POST.get("map_name"),
+            "bonus_spawn_amount": int(request.POST.get("bonus_spawn_amount")),
+            "bonus_spawn_delay": int(request.POST.get("bonus_spawn_delay")),
         }
         sgd.add_game(game_config, request.user.username)
         profile = Profile.objects.get(user=request.user)
